@@ -111,3 +111,4 @@ quick-test.js
 test-*.js
 .env
 logs/
+.env.test
