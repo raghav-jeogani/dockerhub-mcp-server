@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  dockerhub-mcp-server:
+    build: .
+    container_name: dockerhub-mcp-server
+    environment:
+      - NODE_ENV=production
+      - LOG_LEVEL=info
+      # Add your DockerHub credentials here or use .env file
+      # - DOCKERHUB_TOKEN=${DOCKERHUB_TOKEN}
+      # - DOCKERHUB_USERNAME=${DOCKERHUB_USERNAME}
+      # - DOCKERHUB_PASSWORD=${DOCKERHUB_PASSWORD}
+    volumes:
+      - ./logs:/app/logs
+      - ./.env:/app/.env:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "console.log('Health check passed')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - mcp-network
+
+  # Optional: Local registry for testing
+  registry:
+    image: registry:2
+    container_name: local-registry
+    ports:
+      - "5000:5000"
+    environment:
+      - REGISTRY_STORAGE_DELETE_ENABLED=true
+    volumes:
+      - registry-data:/var/lib/registry
+    networks:
+      - mcp-network
+    profiles:
+      - testing
+
+networks:
+  mcp-network:
+    driver: bridge
+
+volumes:
+  registry-data: 
