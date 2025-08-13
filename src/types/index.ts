@@ -31,14 +31,15 @@ export const DockerHubTagSchema = z.object({
   id: z.number(),
   name: z.string(),
   last_updated: z.string(),
-  digest: z.string(),
-  size: z.number(),
-  architecture: z.string(),
-  os: z.string(),
+  digest: z.string().optional(),
+  size: z.number().optional(),
+  architecture: z.string().optional(),
+  os: z.string().optional(),
   variant: z.string().optional(),
   features: z.array(z.string()).optional(),
   os_version: z.string().optional(),
   os_features: z.array(z.string()).optional(),
+  note: z.string().optional(),
 });
 
 export const DockerHubManifestSchema = z.object({

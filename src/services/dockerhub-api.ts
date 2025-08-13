@@ -374,18 +374,19 @@ export class DockerHubApiService {
       return response;
     } catch (error: any) {
       if (error.response?.status === 401) {
-        logger.warn('Authentication required for tags, returning mock data', { repository });
-        // Return mock tags data
+        logger.warn('Authentication required for tags, returning limited data', { repository });
+        // Return limited data with clear indication
         return {
           results: [
             {
               id: 1,
               name: 'latest',
               last_updated: new Date().toISOString(),
-              digest: 'sha256:0000000000000000000000000000000000000000000000000000000000000000',
-              size: 0,
-              architecture: 'unknown',
-              os: 'unknown'
+              digest: undefined, // Don't fake the digest
+              size: undefined,
+              architecture: undefined,
+              os: undefined,
+              note: 'Limited data due to authentication requirements'
             }
           ],
           count: 1
