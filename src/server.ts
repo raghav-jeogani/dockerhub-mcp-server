@@ -106,6 +106,22 @@ class DockerHubMCPServer {
       }
     });
 
+    // Handle resources/list request (for Claude compatibility)
+    this.server.setRequestHandler({ method: "resources/list" }, async () => {
+      logger.debug("Handling resources/list request");
+      return {
+        resources: [], // DockerHub MCP server doesn't provide resources
+      };
+    });
+
+    // Handle prompts/list request (for Claude compatibility)
+    this.server.setRequestHandler({ method: "prompts/list" }, async () => {
+      logger.debug("Handling prompts/list request");
+      return {
+        prompts: [], // DockerHub MCP server doesn't provide prompts
+      };
+    });
+
     // Handle server shutdown
     process.on("SIGINT", () => {
       logger.info("Received SIGINT, shutting down gracefully");
