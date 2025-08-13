@@ -98,20 +98,26 @@ export class Server {
       return;
     }
 
+    // Handle ping method
+    if (method === "ping") {
+      this.sendResponse(id, { pong: true });
+      return;
+    }
+
     // Only allow other methods after initialization
     if (!this.isInitialized && method !== "initialize") {
-      this.sendError(id, new Error("Server not initialized"));
+      this.sendError(id, new Error("Server not initialized"), -32603);
       return;
     }
 
     const handler = this.handlers.get(method);
     if (!handler) {
-      this.sendError(id, new Error(`Method not found: ${method}`));
+      this.sendError(id, new Error(`Method not found: ${method}`), -32601);
       return;
     }
 
     try {
-      const result = await handler({ params });
+      const result = await handler(request);
       this.sendResponse(id, result);
     } catch (error) {
       this.sendError(id, error);
@@ -157,16 +163,25 @@ export class Server {
     process.stdout.write(JSON.stringify(response) + '\n');
   }
 
-  private sendError(id: any, error: any): void {
+  private sendError(id: any, error: any, code: number = -32603): void {
     const response = {
       jsonrpc: "2.0",
       id,
       error: {
-        code: -32603,
+        code,
         message: error.message || "Internal error"
       }
     };
     process.stdout.write(JSON.stringify(response) + '\n');
+  }
+
+  sendNotification(method: string, params: any): void {
+    const notification = {
+      jsonrpc: "2.0",
+      method,
+      params
+    };
+    process.stdout.write(JSON.stringify(notification) + '\n');
   }
 }
 

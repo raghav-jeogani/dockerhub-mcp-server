@@ -78,13 +78,16 @@ export class CacheService {
    */
   getStats() {
     const stats = this.cache.getStats();
+    const total = stats.hits + stats.misses;
+    const hitRate = total > 0 ? stats.hits / total : 0;
+    
     return {
       hits: stats.hits,
       misses: stats.misses,
       keys: stats.keys,
       ksize: stats.ksize,
       vsize: stats.vsize,
-      hitRate: stats.hits / (stats.hits + stats.misses),
+      hitRate,
     };
   }
 
