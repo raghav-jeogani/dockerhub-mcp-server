@@ -48,6 +48,7 @@ export const DockerHubManifestSchema = z.object({
   architecture: z.string(),
   fsLayers: z.array(z.object({
     blobSum: z.string(),
+    size: z.number().optional(),
   })),
   history: z.array(z.object({
     v1Compatibility: z.string(),
@@ -66,6 +67,14 @@ export const DockerHubManifestSchema = z.object({
     signature: z.string(),
     protected: z.string(),
   })),
+  dockerHubData: z.object({
+    totalSize: z.number(),
+    variantCount: z.number(),
+    architectures: z.array(z.string()),
+    operatingSystems: z.array(z.string()),
+    lastUpdated: z.string(),
+    digest: z.string().optional(),
+  }).optional(),
 });
 
 export const DockerHubVulnerabilitySchema = z.object({

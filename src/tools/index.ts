@@ -39,62 +39,234 @@ export class DockerHubTools {
       {
         name: "docker_search_images",
         description: "Search Docker Hub for images based on query and filters",
-        inputSchema: SearchImagesInputSchema,
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "Search query for Docker images"
+            },
+            limit: {
+              type: "number",
+              description: "Maximum number of results to return",
+              default: 10
+            },
+            is_official: {
+              type: "boolean",
+              description: "Filter for official images only",
+              default: false
+            },
+            is_automated: {
+              type: "boolean",
+              description: "Filter for automated builds only",
+              default: false
+            }
+          },
+          required: ["query"]
+        },
       },
       {
         name: "docker_get_image_details",
         description: "Get detailed information about a specific Docker image",
-        inputSchema: GetImageDetailsInputSchema,
+        inputSchema: {
+          type: "object",
+          properties: {
+            repository: {
+              type: "string",
+              description: "Docker repository name (e.g., 'library/nginx')"
+            },
+            tag: {
+              type: "string",
+              description: "Image tag (e.g., 'latest')",
+              default: "latest"
+            }
+          },
+          required: ["repository"]
+        },
       },
       {
         name: "docker_list_tags",
         description: "List all available tags for a Docker repository",
-        inputSchema: ListTagsInputSchema,
+        inputSchema: {
+          type: "object",
+          properties: {
+            repository: {
+              type: "string",
+              description: "Docker repository name (e.g., 'library/nginx')"
+            },
+            limit: {
+              type: "number",
+              description: "Maximum number of tags to return",
+              default: 20
+            }
+          },
+          required: ["repository"]
+        },
       },
       {
         name: "docker_get_manifest",
         description: "Retrieve the manifest for a specific Docker image",
-        inputSchema: GetImageDetailsInputSchema,
+        inputSchema: {
+          type: "object",
+          properties: {
+            repository: {
+              type: "string",
+              description: "Docker repository name (e.g., 'library/nginx')"
+            },
+            tag: {
+              type: "string",
+              description: "Image tag (e.g., 'latest')",
+              default: "latest"
+            }
+          },
+          required: ["repository"]
+        },
       },
       {
         name: "docker_analyze_layers",
         description: "Analyze image layers and provide size breakdown",
-        inputSchema: GetImageDetailsInputSchema,
+        inputSchema: {
+          type: "object",
+          properties: {
+            repository: {
+              type: "string",
+              description: "Docker repository name (e.g., 'library/nginx')"
+            },
+            tag: {
+              type: "string",
+              description: "Image tag (e.g., 'latest')",
+              default: "latest"
+            }
+          },
+          required: ["repository"]
+        },
       },
       {
         name: "docker_compare_images",
         description: "Compare two Docker images (layers, sizes, base images)",
-        inputSchema: CompareImagesInputSchema,
+        inputSchema: {
+          type: "object",
+          properties: {
+            image1: {
+              type: "string",
+              description: "First image (e.g., 'nginx:latest')"
+            },
+            image2: {
+              type: "string",
+              description: "Second image (e.g., 'nginx:alpine')"
+            }
+          },
+          required: ["image1", "image2"]
+        },
       },
       {
         name: "docker_get_dockerfile",
         description: "Attempt to retrieve Dockerfile for an image (when available)",
-        inputSchema: GetImageDetailsInputSchema,
+        inputSchema: {
+          type: "object",
+          properties: {
+            repository: {
+              type: "string",
+              description: "Docker repository name (e.g., 'library/nginx')"
+            },
+            tag: {
+              type: "string",
+              description: "Image tag (e.g., 'latest')",
+              default: "latest"
+            }
+          },
+          required: ["repository"]
+        },
       },
       {
         name: "docker_get_stats",
         description: "Get download statistics and popularity metrics for an image",
-        inputSchema: GetImageDetailsInputSchema,
+        inputSchema: {
+          type: "object",
+          properties: {
+            repository: {
+              type: "string",
+              description: "Docker repository name (e.g., 'library/nginx')"
+            }
+          },
+          required: ["repository"]
+        },
       },
       {
         name: "docker_get_vulnerabilities",
         description: "Fetch security scan results for a Docker image",
-        inputSchema: GetVulnerabilitiesInputSchema,
+        inputSchema: {
+          type: "object",
+          properties: {
+            repository: {
+              type: "string",
+              description: "Docker repository name (e.g., 'library/nginx')"
+            },
+            tag: {
+              type: "string",
+              description: "Image tag (e.g., 'latest')",
+              default: "latest"
+            }
+          },
+          required: ["repository"]
+        },
       },
       {
         name: "docker_get_image_history",
         description: "Get image build history and creation details",
-        inputSchema: GetImageDetailsInputSchema,
+        inputSchema: {
+          type: "object",
+          properties: {
+            repository: {
+              type: "string",
+              description: "Docker repository name (e.g., 'library/nginx')"
+            },
+            tag: {
+              type: "string",
+              description: "Image tag (e.g., 'latest')",
+              default: "latest"
+            }
+          },
+          required: ["repository"]
+        },
       },
       {
         name: "docker_track_base_updates",
         description: "Check if base images have updates available",
-        inputSchema: GetImageDetailsInputSchema,
+        inputSchema: {
+          type: "object",
+          properties: {
+            repository: {
+              type: "string",
+              description: "Docker repository name (e.g., 'library/nginx')"
+            },
+            tag: {
+              type: "string",
+              description: "Image tag (e.g., 'latest')",
+              default: "latest"
+            }
+          },
+          required: ["repository"]
+        },
       },
       {
         name: "docker_estimate_pull_size",
         description: "Calculate estimated download size for pulling an image",
-        inputSchema: GetImageDetailsInputSchema,
+        inputSchema: {
+          type: "object",
+          properties: {
+            repository: {
+              type: "string",
+              description: "Docker repository name (e.g., 'library/nginx')"
+            },
+            tag: {
+              type: "string",
+              description: "Image tag (e.g., 'latest')",
+              default: "latest"
+            }
+          },
+          required: ["repository"]
+        },
       },
     ];
   }
@@ -239,24 +411,21 @@ export class DockerHubTools {
   private async analyzeLayers(args: any) {
     const { repository, tag } = args;
     
-    const manifest = await this.apiService.getManifest(repository, tag);
-    
-    const layerAnalysis = {
-      total_layers: manifest.fsLayers.length,
-      layers: manifest.fsLayers.map((layer, index) => ({
-        index: index + 1,
-        digest: layer.blobSum,
-        estimated_size: "~1MB", // Rough estimate
-      })),
-      total_estimated_size: manifest.fsLayers.length * 1024 * 1024,
-      architecture: manifest.architecture,
-      os: manifest.history[0] ? JSON.parse(manifest.history[0].v1Compatibility).os : "unknown",
-    };
+    const analysis = await this.apiService.analyzeLayers(repository, tag);
     
     return {
       success: true,
       data: {
-        analysis: layerAnalysis,
+        analysis: {
+          total_layers: analysis.total_layers,
+          layers: analysis.layers,
+          total_estimated_size: analysis.total_size,
+          architecture: analysis.architecture,
+          os: analysis.layers[0]?.os || "unknown",
+          variants: analysis.variants,
+          total_size_mb: analysis.total_size_mb,
+          note: analysis.note
+        },
         repository,
         tag,
       },
@@ -282,6 +451,9 @@ export class DockerHubTools {
           common_layers: result.comparison.commonLayers,
           unique_layers_image1: result.comparison.uniqueToImage1,
           unique_layers_image2: result.comparison.uniqueToImage2,
+          size_difference_mb: result.comparison.sizeDifferenceMB,
+          total_layers_image1: result.comparison.totalLayersImage1,
+          total_layers_image2: result.comparison.totalLayersImage2,
         },
       },
     };

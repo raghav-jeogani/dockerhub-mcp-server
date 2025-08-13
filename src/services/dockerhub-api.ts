@@ -98,7 +98,13 @@ export class DockerHubApiService {
           try {
             const bearerToken = await this.getBearerToken();
             if (bearerToken) {
-              config.headers['Authorization'] = `Bearer ${bearerToken}`;
+              // For DockerHub Personal Access Tokens, use 'Token' header
+              // For username/password auth, use 'Bearer' header
+              if (this.registry.token) {
+                config.headers['Authorization'] = `Token ${bearerToken}`;
+              } else {
+                config.headers['Authorization'] = `Bearer ${bearerToken}`;
+              }
             }
           } catch (error) {
             logger.warn('Failed to get bearer token, proceeding without auth', { error: (error as Error).message });
@@ -238,20 +244,50 @@ export class DockerHubApiService {
     const cacheKey = CacheService.generateSearchKey(query, limit, page, filters);
     
     const params = {
-      q: query,
+      query: query,  // Changed from 'q' to 'query'
       page,
       page_size: limit,
       ...filters,
     };
 
-    const response = await this.makeRequest<{ results: DockerHubImage[]; count: number }>(
+    const response = await this.makeRequest<{ results: any[]; count: number }>(
       'GET',
       '/v2/search/repositories/',
       cacheKey,
       params
     );
 
-    return response;
+    // Map the API response to match our schema
+    const mappedResults: DockerHubImage[] = response.results.map((item: any) => ({
+      id: item.id || 0,
+      name: item.repo_name || item.name || '',
+      namespace: item.repo_owner || item.namespace || '',
+      repository_type: item.repository_type || 'image',
+      status: item.status || 1,
+      description: item.short_description || item.description || '',
+      is_private: item.is_private || false,
+      is_automated: item.is_automated || false,
+      can_edit: item.can_edit || false,
+      star_count: item.star_count || 0,
+      pull_count: item.pull_count || 0,
+      last_updated: item.last_updated || new Date().toISOString(),
+      date_registered: item.date_registered || new Date().toISOString(),
+      collaborator_count: item.collaborator_count || 0,
+      hub_user: item.hub_user || '',
+      has_starred: item.has_starred || false,
+      full_description: item.full_description || item.short_description || '',
+      affiliation: item.affiliation || '',
+      permissions: item.permissions || {
+        read: true,
+        write: false,
+        admin: false
+      }
+    }));
+
+    return {
+      results: mappedResults,
+      count: response.count
+    };
   }
 
   /**
@@ -360,35 +396,110 @@ export class DockerHubApiService {
   }
 
   /**
-   * Get image manifest
+   * Get image manifest (using DockerHub API data)
    */
   async getManifest(repository: string, tag: string): Promise<DockerHubManifest> {
     const cacheKey = CacheService.generateManifestKey(repository, tag);
     
-    // Use the registry API for manifests
-    const registryClient = axios.create({
-      baseURL: 'https://registry.hub.docker.com',
-      timeout: 30000,
-      headers: {
-        'User-Agent': 'DockerHub-MCP-Server/1.0.0',
-        'Accept': 'application/vnd.docker.distribution.manifest.v2+json',
-      },
-    });
-
-    // For Docker Registry API, we need to use Basic auth with username and token
-    if (this.registry.token) {
-      // Use username 'oauth2' with token as password for registry API
-      const auth = Buffer.from(`oauth2:${this.registry.token}`).toString('base64');
-      registryClient.defaults.headers.common['Authorization'] = `Basic ${auth}`;
-    }
-
     try {
-      const response = await registryClient.get(`/v2/${repository}/manifests/${tag}`);
-      return response.data;
-    } catch (error: any) {
-      if (error.response?.status === 401) {
-        logger.warn('Authentication required for manifest, returning mock data', { repository, tag });
-        // Return a mock manifest structure
+      // Get tag details from DockerHub API
+      const tagResponse = await this.makeRequest<any>(
+        'GET',
+        `/v2/repositories/${repository}/tags/${tag}/`,
+        cacheKey
+      );
+      
+      if (tagResponse && tagResponse.images) {
+        // Construct a manifest-like response from DockerHub data
+        const layers = tagResponse.images.map((img: any, index: number) => ({
+          blobSum: img.digest,
+          size: img.size || 0
+        }));
+        
+        // Get repository details for additional info
+        const repoResponse = await this.makeRequest<any>(
+          'GET',
+          `/v2/repositories/${repository}/`,
+          undefined
+        );
+        
+        const manifest: DockerHubManifest = {
+          name: repository,
+          tag: tag,
+          architecture: tagResponse.images.find((img: any) => img.architecture === 'amd64')?.architecture || 'unknown',
+          schemaVersion: 2,
+          fsLayers: layers,
+          history: tagResponse.images.map((img: any) => ({
+            v1Compatibility: JSON.stringify({
+              id: img.digest?.substring(7, 19) || 'unknown',
+              parent: '',
+              created: tagResponse.tag_last_pushed || new Date().toISOString(),
+              container: '',
+              container_config: {
+                Hostname: '',
+                Domainname: '',
+                User: '',
+                AttachStdin: false,
+                AttachStdout: false,
+                AttachStderr: false,
+                PortSpecs: null,
+                ExposedPorts: null,
+                Tty: false,
+                OpenStdin: false,
+                StdinOnce: false,
+                Env: null,
+                Cmd: null,
+                Image: '',
+                Volumes: null,
+                WorkingDir: '',
+                Entrypoint: null,
+                NetworkDisabled: false,
+                OnBuild: null,
+                Labels: null
+              },
+              docker_version: '20.10.0',
+              config: {
+                Hostname: '',
+                Domainname: '',
+                User: '',
+                AttachStdin: false,
+                AttachStdout: false,
+                AttachStderr: false,
+                PortSpecs: null,
+                ExposedPorts: null,
+                Tty: false,
+                OpenStdin: false,
+                StdinOnce: false,
+                Env: null,
+                Cmd: null,
+                Image: '',
+                Volumes: null,
+                WorkingDir: '',
+                Entrypoint: null,
+                NetworkDisabled: false,
+                OnBuild: null,
+                Labels: null
+              },
+              architecture: img.architecture,
+              os: img.os,
+              size: img.size
+            })
+          })),
+          signatures: [],
+          // Additional DockerHub-specific data
+          dockerHubData: {
+            totalSize: tagResponse.images.reduce((sum: number, img: any) => sum + (img.size || 0), 0),
+            variantCount: tagResponse.images.length,
+            architectures: [...new Set(tagResponse.images.map((img: any) => img.architecture).filter(Boolean))] as string[],
+            operatingSystems: [...new Set(tagResponse.images.map((img: any) => img.os).filter(Boolean))] as string[],
+            lastUpdated: tagResponse.tag_last_pushed,
+            digest: tagResponse.digest
+          }
+        };
+        
+        return manifest;
+      } else {
+        // Fallback to basic structure
         return {
           name: repository,
           tag: tag,
@@ -399,7 +510,22 @@ export class DockerHubApiService {
           signatures: []
         };
       }
-      throw error;
+    } catch (error: any) {
+      logger.warn('Could not get manifest from DockerHub API, returning basic structure', { 
+        repository, 
+        tag, 
+        error: error.message 
+      });
+      
+      return {
+        name: repository,
+        tag: tag,
+        architecture: 'unknown',
+        schemaVersion: 2,
+        fsLayers: [],
+        history: [],
+        signatures: []
+      };
     }
   }
 
@@ -488,34 +614,68 @@ export class DockerHubApiService {
    */
   async analyzeLayers(repository: string, tag: string): Promise<any> {
     try {
-      // Set a shorter timeout for manifest requests
-      const manifestPromise = this.getManifest(repository, tag);
-      const timeoutPromise = new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error('Manifest request timeout')), 10000)
+      // Get tag details from DockerHub API instead of Registry API
+      const tagResponse = await this.makeRequest<any>(
+        'GET',
+        `/v2/repositories/${repository}/tags/${tag}/`,
+        CacheService.generateManifestKey(repository, tag)
       );
       
-      const manifest = await Promise.race([manifestPromise, timeoutPromise]);
-      
-      return {
-        repository: repository,
-        tag: tag,
-        total_layers: manifest.fsLayers?.length || 0,
-        layers: manifest.fsLayers?.map((layer: any, index: number) => ({
+      if (tagResponse && tagResponse.images) {
+        const layers = tagResponse.images.map((img: any, index: number) => ({
           index: index + 1,
-          digest: layer.blobSum,
-          size: 'Unknown', // Size not available in manifest
-        })) || [],
-        total_size: 'Unknown', // Size not available in manifest
-      };
+          digest: img.digest,
+          size: img.size,
+          architecture: img.architecture,
+          os: img.os,
+          variant: `${img.architecture}/${img.os}`
+        }));
+        
+        const totalSize = layers.reduce((sum: number, layer: any) => sum + (layer.size || 0), 0);
+        const mainArchitecture = layers.find((l: any) => l.architecture === 'amd64')?.architecture || layers[0]?.architecture || 'unknown';
+        
+        return {
+          repository: repository,
+          tag: tag,
+          total_layers: layers.length,
+          layers: layers,
+          total_size: totalSize,
+          total_size_mb: Math.round(totalSize / (1024 * 1024)),
+          architecture: mainArchitecture,
+          variants: layers.length,
+          note: `Analyzed ${layers.length} architecture variants from DockerHub API`
+        };
+      } else {
+        // Fallback to basic info
+        return {
+          repository: repository,
+          tag: tag,
+          total_layers: 0,
+          layers: [],
+          total_size: 0,
+          total_size_mb: 0,
+          architecture: 'unknown',
+          variants: 0,
+          note: 'No layer information available from DockerHub API'
+        };
+      }
     } catch (error: any) {
-      logger.warn('Could not analyze layers, returning basic info', { repository, tag, error: error.message });
+      logger.warn('Could not analyze layers from DockerHub API, returning basic info', { 
+        repository, 
+        tag, 
+        error: error.message 
+      });
+      
       return {
         repository: repository,
         tag: tag,
         total_layers: 0,
         layers: [],
-        total_size: 'Unknown',
-        error: 'Could not retrieve manifest',
+        total_size: 0,
+        total_size_mb: 0,
+        architecture: 'unknown',
+        variants: 0,
+        error: 'Could not retrieve layer information',
         note: 'Layer analysis requires authentication or the image may not be accessible'
       };
     }
@@ -533,16 +693,73 @@ export class DockerHubApiService {
     const repo2 = parts2[0] || '';
     const tag2 = parts2[1] || 'latest';
     
-    const [manifest1, manifest2] = await Promise.all([
-      this.getManifest(repo1, tag1),
-      this.getManifest(repo2, tag2),
-    ]);
+    try {
+      // Get layer analysis for both images using DockerHub API
+      const [analysis1, analysis2] = await Promise.all([
+        this.analyzeLayers(repo1, tag1),
+        this.analyzeLayers(repo2, tag2),
+      ]);
 
-    return {
-      image1: { repository: repo1, tag: tag1, manifest: manifest1 },
-      image2: { repository: repo2, tag: tag2, manifest: manifest2 },
-      comparison: this.compareManifests(manifest1, manifest2),
-    };
+      // Compare the layer information
+      const layers1 = analysis1.layers.map((l: any) => l.digest);
+      const layers2 = analysis2.layers.map((l: any) => l.digest);
+      
+      const commonLayers = layers1.filter((layer: string) => layers2.includes(layer));
+      const uniqueToImage1 = layers1.filter((layer: string) => !layers2.includes(layer));
+      const uniqueToImage2 = layers2.filter((layer: string) => !layers1.includes(layer));
+
+      const layerEfficiency = Math.max(layers1.length, layers2.length) > 0 
+        ? (commonLayers.length / Math.max(layers1.length, layers2.length)) * 100 
+        : 0;
+
+      return {
+        image1: { 
+          repository: repo1, 
+          tag: tag1, 
+          analysis: analysis1,
+          total_layers: analysis1.total_layers,
+          total_size: analysis1.total_size
+        },
+        image2: { 
+          repository: repo2, 
+          tag: tag2, 
+          analysis: analysis2,
+          total_layers: analysis2.total_layers,
+          total_size: analysis2.total_size
+        },
+        comparison: {
+          commonLayers: commonLayers.length,
+          uniqueToImage1: uniqueToImage1.length,
+          uniqueToImage2: uniqueToImage2.length,
+          totalLayersImage1: layers1.length,
+          totalLayersImage2: layers2.length,
+          layerEfficiency: layerEfficiency,
+          sizeDifference: analysis1.total_size - analysis2.total_size,
+          sizeDifferenceMB: Math.round((analysis1.total_size - analysis2.total_size) / (1024 * 1024)),
+        },
+      };
+    } catch (error: any) {
+      logger.warn('Could not compare images, returning basic comparison', { 
+        image1, 
+        image2, 
+        error: error.message 
+      });
+      
+      return {
+        image1: { repository: repo1, tag: tag1, analysis: null },
+        image2: { repository: repo2, tag: tag2, analysis: null },
+        comparison: {
+          commonLayers: 0,
+          uniqueToImage1: 0,
+          uniqueToImage2: 0,
+          totalLayersImage1: 0,
+          totalLayersImage2: 0,
+          layerEfficiency: 0,
+          sizeDifference: 0,
+          sizeDifferenceMB: 0,
+        },
+      };
+    }
   }
 
   /**
@@ -571,8 +788,9 @@ export class DockerHubApiService {
    */
   async estimatePullSize(repository: string, tag: string): Promise<number> {
     try {
-      const manifest = await this.getManifest(repository, tag);
-      return manifest.fsLayers?.length * 1024 * 1024 || 0; // Rough estimate: 1MB per layer
+      // Use layer analysis to get real size data
+      const analysis = await this.analyzeLayers(repository, tag);
+      return analysis.total_size || 0;
     } catch (error) {
       logger.warn('Could not estimate pull size, returning default', { repository, tag, error: (error as Error).message });
       return 100 * 1024 * 1024; // Default 100MB estimate
@@ -583,16 +801,37 @@ export class DockerHubApiService {
    * Check if base image has updates
    */
   async checkBaseImageUpdates(repository: string, tag: string): Promise<any> {
-    const manifest = await this.getManifest(repository, tag);
-    const history = await this.getImageHistory(repository, tag);
-    
-    // This is a simplified implementation
-    // In a real scenario, you'd parse the Dockerfile and check base image versions
-    return {
-      hasUpdates: false, // Placeholder
-      currentVersion: tag,
-      latestVersion: tag,
-      lastChecked: new Date().toISOString(),
-    };
+    try {
+      // Get current image details and tags
+      const [imageDetails, tags] = await Promise.all([
+        this.getImageDetails(repository, tag),
+        this.listTags(repository, 10, 1), // Get recent tags
+      ]);
+      
+      // This is a simplified implementation
+      // In a real scenario, you'd parse the Dockerfile and check base image versions
+      const recentTags = tags.results.filter((t: any) => 
+        t.name !== tag && 
+        new Date(t.last_updated) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) // Last 30 days
+      );
+      
+      return {
+        hasUpdates: recentTags.length > 0,
+        currentVersion: tag,
+        latestVersion: recentTags[0]?.name || tag,
+        recentTags: recentTags.length,
+        lastChecked: new Date().toISOString(),
+        note: 'Base image update detection requires Dockerfile analysis'
+      };
+    } catch (error: any) {
+      logger.warn('Could not check base image updates', { repository, tag, error: error.message });
+      return {
+        hasUpdates: false,
+        currentVersion: tag,
+        latestVersion: tag,
+        lastChecked: new Date().toISOString(),
+        note: 'Update detection not available'
+      };
+    }
   }
 } 
